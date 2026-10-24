@@ -94,7 +94,9 @@ function updateUrl(): void {
 const tutorialContext = () => ({ state: queue.state, phase, selected: selectedSlot === null ? undefined : shop(queue.state)[selectedSlot].part, tick: frame?.tick, frame });
 function hud(): void {
   const state = phase === 'battle' ? queue.state : phase === 'summary' ? lastResult!.state : queue.state;
-  renderHud(state, phase, !!completed, backend.status?.(), ready, failure, phase === 'battle' ? frame?.walls : undefined, phase === 'battle' ? frame?.gold : undefined, networkView);
+  renderHud(state, phase, !!completed, backend.status?.(), ready, failure, phase === 'battle' ? frame?.walls : undefined, phase === 'battle' ? frame?.gold : undefined,
+    // A funded burner does not move the current run on chain; say so until a devnet run starts.
+    networkView.label.startsWith('Devnet') && !isChain(backend) ? { ...networkView, label: 'Play on devnet', reason: 'This run is offline. Open Fund and start a devnet run.' } : networkView);
   const musicGroups = phase === 'battle' ? frame?.groups ?? [] : [];
   followMusic(phase, queue.state.wave + (phase === 'battle' ? 1n : 0n), musicGroups);
   $('#game').dataset.phase = phase; $('#game').dataset.practice = String(!!completed);
@@ -337,6 +339,11 @@ function command(name: string, value?: string): void {
     case 'replan-wave': replan(); break;
     case 'replay-experiment': void replayExperiment(); break;
     case 'return-result': returnResult(); break;
+    case 'start-devnet': {
+      // Keep the current seed if its run has not started yet, so a shared seed can be played on chain.
+      const state = queue.state, fresh = state.wave === 0n && state.actionsUsed === 0n && !completed, words = crypto.getRandomValues(new Uint32Array(2));
+      void startRun(fresh ? state.seed : BigInt(words[0]) << 32n | BigInt(words[1]), 'practice'); break;
+    }
     case 'new-seed': { const words = crypto.getRandomValues(new Uint32Array(2)); void startRun(BigInt(words[0]) << 32n | BigInt(words[1]), 'practice'); break; }
     case 'sound': openSheet('sound', 'Sound', soundControls()); break;
     case 'mute': getAudioEngine().toggleMute(); break;
@@ -349,6 +356,7 @@ function command(name: string, value?: string): void {
   }
 }
 function bindBackend(): void {
+  $('#game').dataset.run = isChain(backend) ? 'chain' : 'offline';
   unsubscribe?.(); unsubscribe = backend.subscribe?.(() => {
     hud(); actionBar();
     if (backend.status?.().mismatch?.length) renderBanner(phase, queue.state, frame?.tick ?? 0n, queue.state.actionsUsed, backend.status?.());

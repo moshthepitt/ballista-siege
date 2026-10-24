@@ -1788,6 +1788,8 @@ body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--ink-950);f
 .fund-balance{font-weight:600;margin-left:auto}
 .fund-message{color:var(--gold);overflow-wrap:anywhere;min-height:0}
 .fund-notice{color:var(--gold)}
+.fund-panel .btn:disabled{opacity:.45}
+.fund-start{width:100%;min-height:52px}
 .fund-section[open]{display:grid}
 .fund-section:not([open]){display:block}
 @media(max-width:600px){.fund-panel .fund-row>.btn{flex:1 1 130px}.fund-balance{margin-left:0}.fund-panel{gap:12px}}

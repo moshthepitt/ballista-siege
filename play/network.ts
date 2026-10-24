@@ -94,7 +94,10 @@ export async function retry(backend: GameBackend): Promise<void> {
 function panel(): string {
   const key = burner?.player.address ?? '';
   const disabled = busy || checking ? 'disabled' : '';
-  return `<div class="fund-panel"><p class="sub fund-notice" role="status">${escape(reason || 'Funded for devnet. Start a new run to use it.')}</p>
+  // main.ts marks whether the current run is on chain; the Start button appears only when a devnet run is possible and not running.
+  const onChain = document.querySelector<HTMLElement>('#game')?.dataset.run === 'chain';
+  const notice = reason || (onChain ? 'This run is on devnet.' : 'Funded for devnet.');
+  return `<div class="fund-panel"><p class="sub fund-notice" role="status">${escape(notice)}</p>${!reason && !onChain ? '<button class="btn-go fund-start" data-command="start-devnet">Start devnet run</button>' : ''}
     ${!bundledManifest ? '<p class="sub">This build is offline-only until its devnet templates are deployed.</p>' : ''}
     <section class="fund-section"><h3>Burner</h3><p class="sub">Devnet only. Whoever holds this key controls the burner.</p>
     <label for="burner-address">Address</label><input id="burner-address" readonly value="${escape(key)}" aria-label="Burner address">
@@ -102,7 +105,7 @@ function panel(): string {
     <p class="sub">About ${runsLeft(balance, hasEntries)} runs left. First run: ~0.0033 SOL rent for two entries, once per burner. Each turn: 12 transactions, ~0.00006 SOL. A full run after the first costs under 0.001 SOL.</p></section>
     <section class="fund-section"><h3>Add devnet SOL</h3><div class="fund-row"><button class="btn btn-2" data-fund="airdrop" ${disabled}>Request airdrop · 0.1 SOL</button><a class="btn btn-quiet" href="https://faucet.solana.com" target="_blank" rel="noopener" data-fund="faucet">Open Solana faucet ↗</a></div>
     <p class="sub">The public faucet is limited per IP. The faucet link copies your address first.</p>
-    <div class="fund-row"><select id="fund-wallet" aria-label="Wallet">${[...(walletDiscovery?.wallets ?? [])].map((wallet, i) => `<option value="${i}">${escape(wallet.name)}</option>`).join('') || '<option>No devnet wallet found</option>'}</select><button class="btn btn-2" data-fund="wallet" ${disabled || (!walletDiscovery?.wallets.size ? 'disabled' : '')}>Send from wallet · 0.02 SOL</button></div></section>
+    ${walletDiscovery?.wallets.size ? `<div class="fund-row"><select id="fund-wallet" aria-label="Wallet">${[...walletDiscovery.wallets].map((wallet, i) => `<option value="${i}">${escape(wallet.name)}</option>`).join('')}</select><button class="btn btn-2" data-fund="wallet" ${disabled}>Send from wallet · 0.02 SOL</button></div>` : '<p class="sub">No browser wallet found. A wallet such as Phantom, Backpack or Solflare, set to devnet, can send SOL here.</p>'}</section>
     <details class="fund-section"><summary>Back up or restore burner key</summary><div class="fund-row"><button class="btn btn-2" data-fund="export" ${!key ? 'disabled' : ''}>Copy key</button><button class="btn btn-quiet" data-fund="download" ${!key ? 'disabled' : ''}>Download key</button></div><label for="restore-key">Solana CLI key · 64-byte JSON array</label><textarea id="restore-key" rows="3" spellcheck="false"></textarea><button class="btn btn-2" data-fund="restore" ${disabled}>Restore key</button></details>
     <details class="fund-section"><summary>RPC endpoint</summary><label for="rpc-endpoint">Devnet RPC</label><input id="rpc-endpoint" type="url" value="${escape(rpcUrl)}" spellcheck="false"><div class="fund-row"><button class="btn btn-2" data-fund="rpc-save" ${disabled}>Save</button><button class="btn btn-quiet" data-fund="rpc-reset" ${disabled}>Reset</button></div><p class="sub">HTTPS, or HTTP on localhost. Production accepts devnet only.</p></details>
     <p class="sub program-result">${escape(programLine)}</p>${burner?.warning ? `<p class="sub">${escape(burner.warning)}</p>` : ''}${chain?.status().pending && program && templates ? '<button class="btn btn-2" data-fund="recover">Resume pending devnet turn</button>' : ''}<p class="sub fund-message" role="status">${escape(message)}</p></div>`;
