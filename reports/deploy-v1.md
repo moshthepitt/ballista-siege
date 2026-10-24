@@ -72,3 +72,19 @@ Eyes `dp1-40-full-final` returns smoke exit 0 for `--seeds=4`: complete desktop,
 The 300-run chain corpus is skipped for the orchestrator. The devnet manifest is intentionally absent until its deployment. Live wallet/faucet behavior and Pages publishing still require that deployment and repository. The 100 kB first-visit target remains open.
 
 Files: new `src/chain-v1/{wire,run-layout}.ts`; `play/{main,copy,select-backend,browser-storage,chain-backend,chain-rpc,deployment,network,network-state,rpc-policy,wallet}.ts`, `play/{index.html,style.css,vite.config.ts,env.d.ts}`, `play/ui/{dom,hud,sheets}.ts`, `play/deployments/{localnet.json,program.ts}`, the two remaining font binaries, retained font licenses and `play/public/licenses/ballista-sdk.txt`; new `play/{network,select-backend}.test.ts`, updated `play/chain-backend.test.ts`, new `test/chain-v1-wire.test.ts`; `scripts/{generate-run-layout,manifest-v1,weight,deploy-smoke,localnet-deploy-v1,e2e-v1,eyes,play-smoke}.ts`, `scripts/subset-fonts.py`, `package.json`, the Pages workflow, `.gitignore` and this report. Removed `play/public/deployment-v1.json` and the JetBrains Mono font binary.
+
+## Devnet deployment
+
+Deployed on 2026-10-24 by creator `9aBiHCJpC2SyQLdqMrprF2N6HgcMPuCwunyasAYbSXzf`, template IDs 11000 to 11024, against Ballista programdata slot 507526156. The deploy took 101 upload transactions plus the lookup table and cost about 0.26 SOL. `play/deployments/devnet.json` is the result.
+
+`RPC_URL=https://api.devnet.solana.com E2E_PLAYER=<funded keypair file> pnpm e2e:v1` played seed 4 to a win on devnet: 10 turns, 121 transactions, every state and event equal to the simulator. The burner spent 0.0039 SOL, of which 0.0033 is the one-time rent for its two entries. A turn took 25 to 32 seconds.
+
+A browser run against the production build funded a fresh burner, started on chain and played three waves: 38 transactions, none failed.
+
+Three fixes came out of these runs:
+
+- The public endpoint answers bursts with HTTP 429. `RpcConnection` now sends a refused request again after 1, 2, 4, 8 and 15 seconds. A 429 means the node did not take the request, so this is safe for signed transactions too.
+- Confirmation reads one signature status per poll and fetches the receipt only once the status is confirmed. Before, each poll made three requests.
+- One start transaction never landed. Sends now leave RPC retries on, and while a signature has no status the client sends the same signed bytes again every fifth poll. One signature lands at most once, so this cannot apply a turn twice.
+
+A turn's 12 transactions take about 25 seconds to confirm. "Next wave" and planning no longer wait for them; only Fight waits until the previous turn is confirmed.

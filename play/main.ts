@@ -76,7 +76,9 @@ let lastTry = readLastTry(initial.seed);
 let replanBeforeLoss: bigint | undefined, replanOriginal: Recap | undefined;
 let completed: { backend: GameBackend; queue: BuildQueue; recaps: Recap[]; selected: number; best: Best; markup: string } | null = null;
 let unsubscribe: (() => void) | undefined, receiptStart = 0;
-const blocked = () => !ready || !!failure || !!(backend.status?.().pending || backend.status?.().error || backend.status?.().mismatch?.length);
+// halted: nothing may change. blocked: also waiting for chain confirmation, so only planning is allowed.
+const halted = () => !ready || !!failure || !!(backend.status?.().error || backend.status?.().mismatch?.length);
+const blocked = () => halted() || !!backend.status?.().pending;
 function continueOffline(): void {
   if (!isChain(backend)) return;
   const start = phase === 'battle' ? backend.state : queue.start;
@@ -106,9 +108,9 @@ function actionBar(): void {
   if (phase === 'battle') { command = 'skip'; label = 'Skip to result'; sub = 'The outcome is already set'; }
   if (phase === 'summary') { command = 'continue-summary'; label = completed || lastResult!.state.done ? 'See result' : 'Next wave'; sub = lastResult!.state.done ? `${lastResult!.state.score} points` : `Wave ${lastResult!.state.wave + 1n} · ${lastResult!.state.gold}g to spend`; }
   if (phase === 'end') { command = 'retry'; label = `Retry seed ${compactSeed(state.seed)}`; sub = 'Same waves, same shop rolls'; }
-  const disabled = command !== 'skip' && blocked();
+  const disabled = command !== 'skip' && (command === 'continue-summary' ? halted() : blocked());
   if (disabled) sub = waiting ? `${status!.completed} of 12 transactions` : failure || status?.error || (status?.mismatch ? 'Chain and sim disagree. Open details.' : 'Connecting to chain…');
-  const aux = phase === 'build' ? `<button class="btn btn-2 phone-aux" data-command="reroll" ${helpAttributes('Reroll')} aria-label="Reroll${rerollReason(state) ? `: ${escape(rerollReason(state))}` : ''}" ${blocked() || state.actionsUsed >= 6n || state.gold < state.rerolls + 1n ? 'disabled' : ''}><span class="reroll-glyph" aria-hidden="true">⟳</span><span>Reroll ${state.rerolls + 1n}g</span>${rerollReason(state) ? `<small class="disabled-reason">${escape(rerollReason(state))}</small>` : ''}</button>` : phase === 'battle' ? `<button class="btn btn-2 phone-aux" data-command="speed" aria-label="Speed ${speed}×, tap to change">${speed}×<span class="label">speed</span></button>` : `<button class="btn btn-quiet phone-aux" data-command="${phase === 'summary' ? 'summary-detail' : 'copy'}">${phase === 'summary' ? 'Details' : 'Copy'}</button>`;
+  const aux = phase === 'build' ? `<button class="btn btn-2 phone-aux" data-command="reroll" ${helpAttributes('Reroll')} aria-label="Reroll${rerollReason(state) ? `: ${escape(rerollReason(state))}` : ''}" ${halted() || state.actionsUsed >= 6n || state.gold < state.rerolls + 1n ? 'disabled' : ''}><span class="reroll-glyph" aria-hidden="true">⟳</span><span>Reroll ${state.rerolls + 1n}g</span>${rerollReason(state) ? `<small class="disabled-reason">${escape(rerollReason(state))}</small>` : ''}</button>` : phase === 'battle' ? `<button class="btn btn-2 phone-aux" data-command="speed" aria-label="Speed ${speed}×, tap to change">${speed}×<span class="label">speed</span></button>` : `<button class="btn btn-quiet phone-aux" data-command="${phase === 'summary' ? 'summary-detail' : 'copy'}">${phase === 'summary' ? 'Details' : 'Copy'}</button>`;
   $('#action-bar').innerHTML = `${phase === 'build' ? `<p class="storm-rule" ${helpAttributes('Storm')}>After tick ${L.TICKS}, survivors storm the wall, even past Palisades.</p><p class="income-rule" ${helpAttributes('Gold')}>Wave end: +${C.INCOME}g base · +${C.CLEAR_GOLD}g/clean lane · +1g/${C.SALVAGE_KILLS} kills</p>` : ''}${phase === 'battle' ? `<div class="speed-control sec-head"><span class="label">Speed</span><span class="seg">${[1, 2].map(n => `<button data-command="speed" data-value="${n}" aria-pressed="${speed === n}" class="${speed === n ? 'on' : ''}">${n}×</button>`).join('')}</span></div>` : ''}<div class="main-action">${aux}<button class="btn-go ${waiting && disabled ? 'waiting' : ''}" data-command="${command}" ${command === 'retry' ? `aria-label="Retry seed ${state.seed}"` : ''} ${disabled ? 'disabled' : ''}>${label}<small>${escape(sub)}</small></button></div>`;
 }
 function render(): void {
@@ -124,11 +126,11 @@ function render(): void {
   renderBanner(phase, phase === 'summary' ? lastResult!.state : state, frame?.tick ?? 0n, state.actionsUsed, backend.status?.(), recap ? summaryMessage(recap) : '');
   if (phase === 'build') {
     $('#game').classList.toggle('has-inspector', inspected !== null);
-    renderShop(state, selectedSlot, inspected !== null, blocked()); renderActions(queue.start, queue.actions, queue.canUndo && !blocked());
-    renderInspector(state, inspected, blocked());
-    $('#orders .sec-head').insertAdjacentHTML('beforeend', planButtons(plans, blocked()));
+    renderShop(state, selectedSlot, inspected !== null, halted()); renderActions(queue.start, queue.actions, queue.canUndo && !halted());
+    renderInspector(state, inspected, halted());
+    $('#orders .sec-head').insertAdjacentHTML('beforeend', planButtons(plans, halted()));
     $('#orders').insertAdjacentHTML('beforeend', planCompare(plans));
-    $('#phase-banner .phone-undo')?.insertAdjacentHTML('afterend', planButtons(plans, blocked()));
+    $('#phase-banner .phone-undo')?.insertAdjacentHTML('afterend', planButtons(plans, halted()));
     $('#build-panel').insertAdjacentHTML('afterbegin', `<div class="phone-plan-compare">${planCompare(plans)}</div>`);
     const offer = selectedSlot === null ? null : shop(state)[selectedSlot];
     let ghost: { cell: bigint; state: RunState } | null = null;
@@ -145,7 +147,7 @@ function render(): void {
     $('#scout-rail').innerHTML = scoutMarkup(state, false, false, lastTry);
     if (innerWidth >= 1800 && innerHeight >= 950) { $('#orders .plan-compare').remove(); $('#scout-rail .rail-title').insertAdjacentHTML('afterend', planCompare(plans)); }
   } else {
-    $('#game').classList.remove('has-inspector'); renderInspector(state, null, blocked());
+    $('#game').classList.remove('has-inspector'); renderInspector(state, null, halted());
     if (phase === 'summary' && recap) {
       renderSettlement(recap, completed ? undefined : lastTry); renderParts(recap.built, { phase, frame: recap.result.frames.at(-1) }); renderFoes([]); renderIncoming(recap.built, [], true);
       renderVerdicts(recap.result.summary.lanes.map((l, i) => ({ lane: BigInt(i), leaks: l.damage, kills: l.kills, retreats: l.retreats, result: l.damage ? 'LEAKS' : 'HOLDS' })), undefined, true, recap.result.summary.lanes.map(l => `${l.kills} ${plural(l.kills, 'kill')}`), undefined, forecast(recap.built).waves[0]?.lanes);
@@ -164,7 +166,7 @@ function render(): void {
   positionTeaching();
 }
 function chooseSlot(slot: number): void {
-  if (phase !== 'build' || blocked()) return;
+  if (phase !== 'build' || halted()) return;
   const offer = shop(queue.state)[slot];
   const reason = cardReason(queue.state, slot);
   if (reason) { toast(reason); return; }
@@ -172,7 +174,7 @@ function chooseSlot(slot: number): void {
   selectedSlot = selectedSlot === slot ? null : slot; inspected = null; hover = selectedSlot === null ? null : suggestedPlacement(queue.state, offer.part); closeSheet(); render();
 }
 function perform(action: Action): void {
-  if (phase !== 'build' || blocked()) return;
+  if (phase !== 'build' || halted()) return;
   const result = queue.attempt(action); if (!result.ok) { toast(result.reason); return; }
   actionSound(action);
   if (action.type === 'buy' || action.type === 'reroll') selectedSlot = null;
@@ -208,7 +210,7 @@ async function fightWave(): Promise<void> {
   } catch (error) { if (!handle.cancelled) { playback = null; phase = 'build'; render(); toast(errorMessage(error)); } }
 }
 function continueSummary(): void {
-  if (phase !== 'summary' || blocked()) return;
+  if (phase !== 'summary' || halted()) return;
   if (queue.state.done || completed) {
     phase = 'end'; selectedRecap = completed ? completed.recaps.findIndex(r => r.result.state.wave === activeRecap()?.result.state.wave) : costliestIndex(recaps);
     best = saveBest(queue.state, completed?.best);
@@ -310,8 +312,8 @@ function command(name: string, value?: string): void {
     case 'continue-summary': continueSummary(); break;
     case 'speed': speed = value ? Number(value) : speed === 1 ? 2 : 1; if (playback?.tickMs) followMusic('battle', queue.state.wave + 1n, frame?.groups ?? [], playback.tickMs, speed); actionBar(); break;
     case 'plan-compare': openSheet('plan-compare', 'Compare plans', planCompare(plans)); break;
-    case 'plan': if (phase === 'build' && !blocked() && (value === 'A' || value === 'B')) { queue = plans.switch(value); selectedSlot = null; inspected = null; hover = null; closeSheet(); render(); } break;
-    case 'undo': if (phase === 'build' && !blocked()) { const r = queue.undo(); if (!r.ok) toast(r.reason); inspected = null; selectedSlot = null; render(); } break;
+    case 'plan': if (phase === 'build' && !halted() && (value === 'A' || value === 'B')) { queue = plans.switch(value); selectedSlot = null; inspected = null; hover = null; closeSheet(); render(); } break;
+    case 'undo': if (phase === 'build' && !halted()) { const r = queue.undo(); if (!r.ok) toast(r.reason); inspected = null; selectedSlot = null; render(); } break;
     case 'reroll': perform({ type: 'reroll' }); break;
     case 'upgrade': case 'sell': case 'overclock': if (inspected !== null) perform({ type: name, cell: inspected }); break;
     case 'escape': hideTeaching(); if (openSheetName()) { closeSheet(); hideTeaching(); renderTutorial(tutorialContext()); } else { inspected = null; selectedSlot = null; hover = null; render(); } break;
@@ -350,7 +352,7 @@ function bindBackend(): void {
   unsubscribe?.(); unsubscribe = backend.subscribe?.(() => {
     hud(); actionBar();
     if (backend.status?.().mismatch?.length) renderBanner(phase, queue.state, frame?.tick ?? 0n, queue.state.actionsUsed, backend.status?.());
-    if (phase === 'build') renderShop(queue.state, selectedSlot, inspected !== null, blocked());
+    if (phase === 'build') renderShop(queue.state, selectedSlot, inspected !== null, halted());
     if (backend.status?.().error && /fund|lamport|insufficient/i.test(backend.status?.().error ?? '') && openSheetName() !== 'fund') void fundPanel();
     if (openSheetName() === 'chain') updateSheet(chainBody());
   });
@@ -373,7 +375,7 @@ $('#game').addEventListener('click', event => {
   const control = target.closest<HTMLElement>('[data-command]'); if (control) { command(control.dataset.command!, control.dataset.value ?? control.dataset.lane); renderTutorial(tutorialContext()); return; }
   const chart = target.closest<HTMLElement>('[data-recap-wave]'); if (chart && Number(chart.dataset.recapWave) >= 0) { pickSound(); selectedRecap = Number(chart.dataset.recapWave); replan(); return; }
   const cell = target.closest<HTMLElement>('[data-cell]');
-  if (cell && phase === 'build' && !blocked()) {
+  if (cell && phase === 'build' && !halted()) {
     const index = BigInt(cell.dataset.cell!);
     if (selectedSlot !== null && !partAt(queue.state, index)) perform({ type: 'buy', slot: BigInt(selectedSlot), cell: index });
     else if (partAt(queue.state, index)) { pickSound(); selectedSlot = null; inspected = inspected === index ? null : index; closeSheet(); render(); }

@@ -120,7 +120,8 @@ async function main(): Promise<void> {
   if (!program?.executable) throw new Error(`Ballista ${BALLISTA_ADDRESS} is not executable. Run pnpm localnet with vendor/ballista.so.`);
   const creator = await readCreator();
   console.log(`[deploy:v1] Creator ${creator.address}`);
-  await connection.fund(creator.address, 2_000_000_000n);
+  // Devnet has no automatic airdrop: the creator must already hold the ~0.26 SOL of template and lookup rent.
+  await connection.fund(creator.address, cluster === 'devnet' ? 300_000_000n : 2_000_000_000n);
   const { deployment, transactions, totalCU } = await deployTemplates(connection, creator);
   const constantsHash = createHash('sha256').update(await readFile(new URL('src/v1/constants.ts', root))).digest('hex');
   const lookup = await deployLookup(connection, creator, deployment);

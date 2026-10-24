@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateKeyPairSigner } from '@solana/kit';
+import { createKeyPairSignerFromBytes, generateKeyPairSigner } from '@solana/kit';
 import { LIMITS } from '../src/v1/constants.js';
 import { planner } from '../src/v1/bots/planner.js';
 import { applyAction, newRun, playTurn, type Action, type RunState } from '../src/v1/sim.js';
@@ -83,8 +83,11 @@ async function main(): Promise<void> {
   catch (error) { throw new Error(`Cannot read play/deployments/${cluster}.json. Run pnpm deploy:v1 first.\n${errorMessage(error)}`); }
   const { manifest } = await readManifest(input);
   if (process.env.RPC_URL) manifest.rpcUrl = validateRpcUrl(process.env.RPC_URL);
-  const player = await generateKeyPairSigner();
-  console.log(`[e2e:v1] RPC ${manifest.rpcUrl}; fresh burner ${player.address}`);
+  // Devnet has no automatic airdrop: E2E_PLAYER names a funded Solana CLI keypair file.
+  const player = process.env.E2E_PLAYER
+    ? await createKeyPairSignerFromBytes(new Uint8Array(JSON.parse(await readFile(process.env.E2E_PLAYER, 'utf8'))))
+    : await generateKeyPairSigner();
+  console.log(`[e2e:v1] RPC ${manifest.rpcUrl}; ${process.env.E2E_PLAYER ? 'player' : 'fresh burner'} ${player.address}`);
   await runE2e(await ChainBackend.create(manifest, { player }));
 }
 
