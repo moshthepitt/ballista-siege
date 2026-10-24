@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0B0F17">
+  <title>Sound lab · Ballista Siege</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--ink-950); color: var(--text-1); font: 16px/1.5 var(--font-ui); }
+    main { max-width: 1120px; margin: auto; padding: 32px 24px 56px; }
+    header { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+    h1, h2 { font-family: var(--font-display); font-weight: 400; line-height: 1.2; margin: 0 0 12px; }
+    h1 { font-size: 40px; } h2 { font-size: 26px; }
+    p { color: var(--text-2); margin: 0 0 16px; }
+    a { color: var(--gold); } button, select, input { font: inherit; }
+    button, select { color: var(--text-1); background: var(--ink-700); border: 1px solid var(--ink-500); border-bottom-width: 3px; border-radius: 9px; min-height: 48px; padding: 10px 14px; cursor: pointer; touch-action: manipulation; }
+    button:hover { background: var(--ink-600); } button:active { transform: translateY(1px); }
+    button[aria-pressed=true] { background: var(--gold); border-color: var(--gold-deep); color: var(--go-ink); }
+    :focus-visible { outline: 3px solid var(--p-ballista); outline-offset: 3px; }
+    section { background: var(--ink-800); border: 1px solid var(--ink-700); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+    .controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+    label { display: grid; gap: 8px; min-width: 0; }
+    label span { display: flex; justify-content: space-between; gap: 8px; }
+    input[type=range] { width: 100%; min-height: 40px; margin: 0; accent-color: var(--gold); cursor: pointer; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .effects { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .effects button { text-align: left; }
+    .effects button small { display: block; color: var(--text-2); font-size: 12px; margin-top: 4px; }
+    .effects button[data-category=combat] { border-top: 3px solid var(--p-ballista); }
+    .effects button[data-category=build] { border-top: 3px solid var(--gold); }
+    .effects button[data-category=result] { border-top: 3px solid var(--hold); }
+    #audio-status { font-size: 14px; color: var(--text-2); min-height: 22px; margin: 8px 0 0; }
+    output { font-variant-numeric: tabular-nums; color: var(--gold); }
+    .section-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+    .section-head label { min-width: 180px; }
+    #music-status { font-size: 14px; margin-bottom: 0; }
+    @media(max-width: 700px) { .effects { grid-template-columns: repeat(2, minmax(0, 1fr)); } .controls { grid-template-columns: 1fr; gap: 12px; } main { padding: 24px 16px; } section { padding: 20px 16px; } h1 { font-size: 32px; } .section-head { display: block; } .section-head label { margin-bottom: 20px; } header { flex-wrap: wrap; } }
+  </style>
+</head>
+<body>
+  <main id="game">
+    <header>
+      <div><h1>Sound lab</h1><p>Ballista Siege · Listen, compare, adjust.</p><p id="audio-status" role="status">Click a sound or press a key to start audio.</p></div>
+      <a href="/?backend=local">Back to game</a>
+    </header>
+    <section aria-labelledby="mix-heading">
+      <div class="section-head"><h2 id="mix-heading">Mix</h2><button id="mute" type="button" aria-pressed="false">Mute (M)</button></div>
+      <div class="controls">
+        <label><span>Master <output id="master-value" for="master"></output></span><input id="master" type="range" min="0" max="100" step="1"></label>
+        <label><span>Music <output id="music-value" for="music"></output></span><input id="music" type="range" min="0" max="100" step="1"></label>
+        <label><span>Effects <output id="sfx-value" for="sfx"></output></span><input id="sfx" type="range" min="0" max="100" step="1"></label>
+      </div>
+    </section>
+    <section aria-labelledby="music-heading">
+      <h2 id="music-heading">Music</h2>
+      <p>Choose a phase to start. Phase and speed changes land on the next bar.</p>
+      <div class="buttons" id="phases">
+        <button type="button" data-phase="build" aria-pressed="false">Build</button><button type="button" data-phase="battle" aria-pressed="false">Battle</button><button type="button" data-phase="boss" aria-pressed="false">Boss</button><button type="button" data-phase="outro" aria-pressed="false">Outro</button><button type="button" id="stop-music">Stop music</button>
+      </div>
+      <div class="controls">
+        <label><span>Intensity <output id="intensity-value" for="intensity">1</output></span><input id="intensity" type="range" min="0" max="3" step="1" value="1"></label>
+        <label>Playback speed<select id="speed"><option value="1">1× · 3 s battle bar</option><option value="2">2× · 1.5 s battle bar</option></select></label>
+      </div>
+      <p id="music-status" role="status">Music stopped.</p>
+    </section>
+    <section aria-labelledby="effects-heading">
+      <div class="section-head"><div><h2 id="effects-heading">Effects</h2><p>Shift-click a sound to play five at once. They merge into one louder hit.</p></div><label>Lane<select id="lane"><option value="">Centre</option><option value="0">1 · Left</option><option value="1">2 · Left centre</option><option value="2">3 · Right centre</option><option value="3">4 · Right</option></select></label></div>
+      <div id="effects" class="effects"></div>
+    </section>
+  </main>
+  <script type="module" src="/audio-lab.ts"></script>
+</body>
+</html>

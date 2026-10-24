@@ -1,0 +1,102 @@
+[
+  {
+    "glyphs": [
+      {
+        "left": 49.234375,
+        "top": 541,
+        "right": 115.234375,
+        "bottom": 555
+      }
+    ],
+    "clips": [
+      {
+        "left": 0,
+        "top": 0,
+        "right": 390,
+        "bottom": 844
+      },
+      {
+        "left": 0,
+        "top": 0,
+        "right": 390,
+        "bottom": 844
+      },
+      {
+        "left": 0,
+        "top": 0,
+        "right": 390,
+        "bottom": 844
+      }
+    ],
+    "inkInset": 3,
+    "name": "span.verdict risk  \"Under attack\"",
+    "bounds": {
+      "left": 47.234375,
+      "top": 534,
+      "right": 117.234375,
+      "bottom": 562
+    },
+    "parent": {
+      "left": 47.234375,
+      "top": 534,
+      "right": 117.234375,
+      "bottom": 562
+    },
+    "clientWidth": 68,
+    "clientHeight": 26,
+    "scrollWidth": 68,
+    "scrollHeight": 26,
+    "ellipsis": false,
+    "overlay": false
+  },
+  {
+    "glyphs": [
+      {
+        "left": 215.578125,
+        "top": 541,
+        "right": 281.578125,
+        "bottom": 555
+      }
+    ],
+    "clips": [
+      {
+        "left": 0,
+        "top": 0,
+        "right": 390,
+        "bottom": 844
+      },
+      {
+        "left": 0,
+        "top": 0,
+        "right": 390,
+        "bottom": 844
+      },
+      {
+        "left": 0,
+        "top": 0,
+        "right": 390,
+        "bottom": 844
+      }
+    ],
+    "inkInset": 3,
+    "name": "span.verdict risk  \"Under attack\"",
+    "bounds": {
+      "left": 213.578125,
+      "top": 534,
+      "right": 283.578125,
+      "bottom": 562
+    },
+    "parent": {
+      "left": 213.578125,
+      "top": 534,
+      "right": 283.578125,
+      "bottom": 562
+    },
+    "clientWidth": 68,
+    "clientHeight": 26,
+    "scrollWidth": 68,
+    "scrollHeight": 26,
+    "ellipsis": false,
+    "overlay": false
+  }
+]

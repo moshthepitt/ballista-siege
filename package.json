@@ -1,0 +1,36 @@
+{
+  "name": "ballista-defence",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "dev": "vite play",
+    "dev:v0": "vite web",
+    "build:play": "vite build play",
+    "smoke": "vite build play && node --import tsx scripts/play-smoke.ts",
+    "build:web": "vite build web",
+    "localnet": "solana-test-validator --reset --quiet --ledger .tmp/ledger --bpf-program BLSTAmUBA29tcRUvoq5DBYxRhGptrnWPtfQW65RszRWR vendor/ballista.so",
+    "deploy:local": "node --import tsx scripts/localnet-deploy.ts",
+    "deploy:v1": "node --import tsx scripts/localnet-deploy-v1.ts",
+    "e2e:v1": "node --import tsx scripts/e2e-v1.ts",
+    "e2e": "node --import tsx scripts/e2e-local.ts",
+    "eyes": "node --import tsx scripts/eyes.ts",
+    "ears": "node --import tsx scripts/ears.ts",
+    "weight": "node --import tsx scripts/weight.ts",
+    "generate:wire": "node --import tsx scripts/generate-run-layout.ts"
+  },
+  "dependencies": {
+    "@jac0xb/ballista": "file:vendor/ballista-sdk",
+    "@solana/kit": "8.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "litesvm": "1.6.1",
+    "playwright-core": "1.55.0",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vite": "7.1.12",
+    "vitest": "4.1.11"
+  }
+}

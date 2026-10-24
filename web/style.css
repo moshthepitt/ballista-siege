@@ -1,0 +1,99 @@
+:root {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: #e5e5e5;
+  background: #000;
+  color-scheme: dark;
+  font-synthesis: none;
+  --gap: 6px;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+button, input { border: 1px solid #444; border-radius: 0; background: #111; color: inherit; }
+button { min-height: 44px; padding: 8px 12px; touch-action: manipulation; }
+button:hover:not(:disabled) { border-color: #aaa; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+button:disabled { opacity: 0.6; }
+[hidden] { display: none !important; }
+a { color: #a8caff; }
+p { line-height: 1.5; }
+#game { width: min(100% - 24px, 540px); margin: 28px auto 48px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h1 { font-size: clamp(19px, 5vw, 25px); margin: 4px 0 0; letter-spacing: -1px; }
+h2 { font-size: 21px; margin: 0 0 8px; }
+.eyebrow { color: #aaa; font-size: 11px; margin: 0; }
+#restart { font-size: 12px; }
+.stats { display: grid; grid-template-columns: 1.2fr repeat(4, 1fr); gap: var(--gap); margin: 24px 0; }
+.stats div { min-width: 0; }
+.stats span { display: block; color: #999; font-size: 11px; margin-bottom: 6px; }
+.stats strong { font-size: clamp(17px, 4.3vw, 23px); overflow-wrap: anywhere; }
+.danger, #error { color: #ff9388; }
+#error { padding: 12px; border: 1px solid #71362f; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.backend-notice { color: #e5c47c; font-size: 11px; }
+.transaction-status { color: #999; font-size: 10px; overflow-wrap: anywhere; min-height: 15px; white-space: pre-wrap; }
+#chain-mismatch { color: #ff9388; border: 2px solid #b33e31; padding: 12px; font-size: 12px; overflow-wrap: anywhere; }
+.section-label { font-size: 12px; margin: 20px 0 10px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; }
+.section-label > span { color: #999; font-size: 11px; }
+.offers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); }
+.offer { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 82px; gap: 6px; padding: 8px 4px; }
+.offer[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: -2px; }
+.offer-shortcut { position: absolute; left: 7px; top: 6px; font-size: 10px; opacity: 0.8; }
+.offer-letter { font-size: 26px; font-weight: 700; }
+.offer-name { font-size: clamp(10px, 2.7vw, 12px); }
+.hint { color: #b8b8b8; font-size: 11px; min-height: 34px; margin: 10px 0 0; }
+.preview { border: 1px solid #454545; padding: 10px; min-height: 56px; font-size: 12px; margin: 0 0 18px; display: flex; align-items: center; }
+.board-label { font-size: 11px; color: #b8b8b8; margin: 12px 0 10px; }
+.four-columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); }
+.incoming-lane { text-align: center; font-size: clamp(10px, 2.6vw, 12px); padding: 8px 1px; border-top: 1px solid #444; }
+.incoming-lane > * { display: block; }
+.incoming-lane strong { margin-bottom: 8px; font-size: 11px; }
+.incoming-lane span { color: #999; font-size: 10px; margin-top: 6px; }
+.incoming-lane b { font-weight: 400; margin-top: 2px; }
+.edge-label { color: #888; font-size: 10px; margin: 10px 0 6px; }
+.edge-label.back { margin-top: 6px; text-align: right; }
+.board-wrap { position: relative; }
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); }
+.cell { aspect-ratio: 1; padding: 0; min-height: 0; font-size: clamp(22px, 7vw, 36px); font-weight: 700; border-color: #333; }
+.cell:disabled { opacity: 1; }
+.cell.ghost { border: 2px dashed #fff; }
+.part-0 { background: #101010; color: #555; }
+.part-1 { background: #182b46; color: #91baff; }
+.part-2 { background: #43251f; color: #ff9a8c; }
+.part-3 { background: #3b3016; color: #ecc36b; }
+.part-4 { background: #302143; color: #c2a0ff; }
+.part-5 { background: #1c3424; color: #8dd5a2; }
+.part-6 { background: #193537; color: #7ad6d8; }
+.survey-lane { border-top: 1px solid #444; padding: 8px 2px; font-size: clamp(10px, 2.7vw, 12px); }
+.survey-lane span { display: flex; justify-content: space-between; gap: 1px; margin: 4px 0; color: #aaa; }
+.survey-lane b { color: #eee; font-weight: 400; }
+.lane-results { color: #aaa; font-size: clamp(10px, 2.6vw, 11px); }
+.lane-results div { border-top: 1px solid #333; padding: 6px 2px; }
+.lane-results span { display: block; margin: 3px 0; }
+.wave-result { font-size: 12px; color: #ccc; min-height: 36px; }
+.animation { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); pointer-events: none; overflow: hidden; }
+.animation-lane { position: relative; }
+.enemy { position: absolute; top: 0; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #000; }
+.enemy.brute { width: 11px; height: 11px; background: #ffb465; }
+.enemy.killed { box-shadow: 0 0 0 2px #ff7369; }
+#result { border: 1px solid #777; padding: 16px; margin: 20px 0; }
+#result-score { font-size: 13px; }
+#result label { font-size: 11px; color: #aaa; }
+.share { display: flex; gap: 6px; margin: 8px 0 14px; }
+.share input { flex: 1; min-width: 0; padding: 8px; font-size: 11px; }
+.share button, #retry { font-size: 12px; }
+details { border-top: 1px solid #333; padding: 16px 0; margin-top: 24px; font-size: 12px; color: #aaa; }
+summary { color: #ddd; cursor: pointer; min-height: 28px; }
+.legend > div { display: flex; align-items: start; gap: 10px; margin: 10px 0; }
+.legend p { margin: 0; }
+.legend strong { color: #ddd; }
+.part-key { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border: 1px solid #555; font-weight: bold; }
+
+@media (max-width: 360px) {
+  #game { margin-top: 16px; }
+  .section-label { display: block; }
+  .section-label > span { display: block; margin-top: 4px; }
+  .incoming-lane strong { font-size: 10px; }
+}

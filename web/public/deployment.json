@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "programId": "BLSTAmUBA29tcRUvoq5DBYxRhGptrnWPtfQW65RszRWR",
+  "rpcUrl": "http://127.0.0.1:8899/",
+  "creator": "9aBiHCJpC2SyQLdqMrprF2N6HgcMPuCwunyasAYbSXzf",
+  "ids": {
+    "prepare": 0,
+    "survey": 1,
+    "fight": 2,
+    "settle": 3,
+    "state": 4
+  },
+  "addresses": {
+    "prepare": "4R35ZDAQ2tMp1sfNCWaW5qq7rSXWwCMDCJZmBDU5EZfg",
+    "survey": "Bd53zRGhHuxN7mMVr9nibeKxb8XTEBk2HaphrojqXqS6",
+    "fight": "2CiZEfozk71nP24A5hX5JZMmXXQeDBPYACXd48CbgtMi",
+    "settle": "4D1zyX98kZ4QWsHhvBSQG7BP63VaE17SqhuiKz1Hwceh",
+    "state": "9L3Hyx6nDphtyN8RwEqtT7WdTKWewxVzAVXhcUzufNg4"
+  },
+  "constantsHash": "4facfe049c01a41d1f85439dba4cee8ac86316e009589e8987c75bf39e29dda7",
+  "constantsFingerprint": "85ce6340f7861af692148418f5c0cc167a6b57102ec95c62f166a10e994562ef",
+  "templateHashes": {
+    "prepare": "0e1d974504cc69bd2c23b2fd839b0fbce0a63609d2a55a998b26562784160b97",
+    "survey": "f454f994cddbe05e14707cf483e1ec3b48934b11789e1c9958b2713d9918e22c",
+    "fight": "d6dd603091f5e1986877aaa7958e878f3282cc8c66a26461de0c8d81b68d51a8",
+    "settle": "8178ff53c85680627b11c522c173251946caa9c363dcb9eca1a170b88796372f",
+    "state": "39c925258eea09f2783aaae606f3c97b28678cad7f62d8c4bef67923019617b4"
+  }
+}

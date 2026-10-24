@@ -1,0 +1,446 @@
+import { MAX_INPUT_BYTES, MAX_TEMPLATE_PAYLOAD_LENGTH, PROGRAM_FLAG_EMIT_EVENT, REGISTRY_OPEN_CPIS, TEMPLATE_PROGRAM_VERSION, opcode, } from './compiler.js';
+export const BALLISTA_PROGRAM_ADDRESS = 'BLSTAmUBA29tcRUvoq5DBYxRhGptrnWPtfQW65RszRWR';
+export const TEMPLATE_ACCOUNT_VERSION = 2;
+export const TEMPLATE_ACCOUNT_HEADER_LENGTH = 80;
+export const TEMPLATE_STATE_UPLOADING = 0;
+export const TEMPLATE_STATE_FINALIZED = 1;
+export const INSTRUCTION_CREATE_TEMPLATE = 0;
+export const INSTRUCTION_BEGIN_TEMPLATE = 1;
+export const INSTRUCTION_WRITE_TEMPLATE_CHUNK = 2;
+export const INSTRUCTION_FINALIZE_TEMPLATE = 3;
+export const INSTRUCTION_CANCEL_TEMPLATE = 4;
+export const INSTRUCTION_RUN = 5;
+export function encodeCreateTemplate(compiled, templateId) {
+    const writer = new Writer();
+    writer.u8(INSTRUCTION_CREATE_TEMPLATE);
+    writer.u16(templateId);
+    writer.raw(compiled.hash);
+    writer.raw(compiled.bytes);
+    return writer.finish();
+}
+export function encodeBeginTemplate(compiled, templateId) {
+    const writer = new Writer();
+    writer.u8(INSTRUCTION_BEGIN_TEMPLATE);
+    writer.u16(templateId);
+    writer.u32(compiled.bytes.length);
+    writer.raw(compiled.hash);
+    return writer.finish();
+}
+export function encodeWriteTemplateChunk(offset, bytes) {
+    if (bytes.length === 0)
+        throw new RangeError('Template chunks cannot be empty');
+    const writer = new Writer();
+    writer.u8(INSTRUCTION_WRITE_TEMPLATE_CHUNK);
+    writer.u32(offset);
+    writer.raw(bytes);
+    return writer.finish();
+}
+export function encodeFinalizeTemplate() {
+    return Uint8Array.of(INSTRUCTION_FINALIZE_TEMPLATE);
+}
+export function encodeCancelTemplate() {
+    return Uint8Array.of(INSTRUCTION_CANCEL_TEMPLATE);
+}
+export function planTemplateUpload(compiled, templateId, options = {}) {
+    validateTemplateId(templateId);
+    const maxInstructionDataBytes = options.maxInstructionDataBytes ?? 3_500;
+    if (maxInstructionDataBytes < 64)
+        throw new RangeError('Instruction data limit is too small');
+    const oneShot = encodeCreateTemplate(compiled, templateId);
+    if (oneShot.length <= maxInstructionDataBytes) {
+        return {
+            mode: 'oneShot',
+            instructions: [{ kind: 'create', data: oneShot }],
+            payloadLength: compiled.bytes.length,
+            payloadHash: compiled.hash,
+        };
+    }
+    const chunkLength = maxInstructionDataBytes - 5;
+    const instructions = [
+        { kind: 'begin', data: encodeBeginTemplate(compiled, templateId) },
+    ];
+    for (let offset = 0; offset < compiled.bytes.length; offset += chunkLength) {
+        const bytes = compiled.bytes.slice(offset, Math.min(offset + chunkLength, compiled.bytes.length));
+        instructions.push({ kind: 'write', offset, data: encodeWriteTemplateChunk(offset, bytes) });
+    }
+    instructions.push({ kind: 'finalize', data: encodeFinalizeTemplate() });
+    return {
+        mode: 'chunked',
+        instructions,
+        payloadLength: compiled.bytes.length,
+        payloadHash: compiled.hash,
+    };
+}
+export function resumeTemplateUpload(compiled, account, options = {}) {
+    const decoded = account instanceof Uint8Array ? decodeTemplateAccount(account) : account;
+    if (decoded.state !== TEMPLATE_STATE_UPLOADING)
+        throw new TypeError('Template is already finalized');
+    if (decoded.payloadLength !== compiled.bytes.length || !equalBytes(decoded.payloadHash, compiled.hash)) {
+        throw new TypeError('On-chain upload does not match the compiled template');
+    }
+    if (!equalBytes(decoded.payload.slice(0, decoded.writtenLength), compiled.bytes.slice(0, decoded.writtenLength))) {
+        throw new TypeError('Previously uploaded template bytes do not match');
+    }
+    const maxInstructionDataBytes = options.maxInstructionDataBytes ?? 3_500;
+    const chunkLength = maxInstructionDataBytes - 5;
+    if (chunkLength <= 0)
+        throw new RangeError('Instruction data limit is too small');
+    const instructions = [];
+    for (let offset = decoded.writtenLength; offset < compiled.bytes.length; offset += chunkLength) {
+        const bytes = compiled.bytes.slice(offset, Math.min(offset + chunkLength, compiled.bytes.length));
+        instructions.push({ kind: 'write', offset, data: encodeWriteTemplateChunk(offset, bytes) });
+    }
+    instructions.push({ kind: 'finalize', data: encodeFinalizeTemplate() });
+    return {
+        mode: 'chunked',
+        instructions,
+        payloadLength: compiled.bytes.length,
+        payloadHash: compiled.hash,
+    };
+}
+export function encodeRunInputs(compiled, values, options = {}) {
+    const writer = new Writer();
+    const groupLengths = options.groupLengths ?? [];
+    if (groupLengths.length !== compiled.accountGroupOrder.length) {
+        throw new TypeError(`Expected ${compiled.accountGroupOrder.length} account group lengths`);
+    }
+    for (const length of groupLengths) {
+        if (!Number.isInteger(length) || length < 0 || length > 0xff)
+            throw new RangeError('Account group length must be 0 to 255');
+        writer.u8(length);
+    }
+    for (const name of compiled.inputOrder) {
+        if (!(name in values))
+            throw new TypeError(`Missing input: ${name}`);
+        encodeInput(writer, compiled.template.inputs[name], values[name]);
+    }
+    const unknown = Object.keys(values).filter((name) => !compiled.inputOrder.includes(name));
+    if (unknown.length > 0)
+        throw new TypeError(`Unknown inputs: ${unknown.join(', ')}`);
+    const rows = options.rows ?? [];
+    if (compiled.rowInputOrder.length === 0 && rows.length > 0)
+        throw new TypeError('Template has no row inputs');
+    const rowDefinitions = compiled.template.batch?.rowInputs ?? {};
+    for (const [rowIndex, row] of rows.entries()) {
+        for (const name of compiled.rowInputOrder) {
+            if (!(name in row))
+                throw new TypeError(`Missing row input ${name} in row ${rowIndex}`);
+            encodeInput(writer, rowDefinitions[name], row[name]);
+        }
+        const unknownRow = Object.keys(row).filter((name) => !compiled.rowInputOrder.includes(name));
+        if (unknownRow.length > 0)
+            throw new TypeError(`Unknown row inputs in row ${rowIndex}: ${unknownRow.join(', ')}`);
+    }
+    const bytes = writer.finish();
+    if (bytes.length > MAX_INPUT_BYTES)
+        throw new RangeError('Encoded run inputs exceed 1024 bytes');
+    return bytes;
+}
+export function encodeRun(compiled, values, options = {}) {
+    const inputs = encodeRunInputs(compiled, values, options);
+    return Uint8Array.of(INSTRUCTION_RUN, ...inputs);
+}
+export function buildRunInstruction(input) {
+    assertAddress(input.programAddress, 'program address');
+    assertAddress(input.templateAddress, 'template address');
+    const accounts = [
+        { address: input.templateAddress.slice(), signer: false, writable: false },
+    ];
+    for (const name of input.compiled.fixedAccountOrder) {
+        const binding = input.accounts[name];
+        if (!binding)
+            throw new TypeError(`Missing account binding: ${name}`);
+        accounts.push(bindingDescriptor(binding, input.compiled.template.accounts[name], name));
+    }
+    const unknownAccounts = Object.keys(input.accounts).filter((name) => !input.compiled.fixedAccountOrder.includes(name));
+    if (unknownAccounts.length > 0)
+        throw new TypeError(`Unknown account bindings: ${unknownAccounts.join(', ')}`);
+    const rows = input.batchRows ?? [];
+    if (!input.compiled.template.batch && rows.length > 0)
+        throw new TypeError('Template has no batch range');
+    if (rows.length > (input.compiled.template.batch?.maxIterations ?? 0)) {
+        throw new RangeError('Batch row count exceeds the template maximum');
+    }
+    if (rows.length < (input.compiled.template.batch?.minIterations ?? 0)) {
+        throw new RangeError('Batch row count is below the template minimum');
+    }
+    for (const [rowIndex, row] of rows.entries()) {
+        for (const name of input.compiled.batchAccountOrder) {
+            const binding = row[name];
+            if (!binding)
+                throw new TypeError(`Missing batch account ${name} in row ${rowIndex}`);
+            accounts.push(bindingDescriptor(binding, input.compiled.template.batch.row[name], name));
+        }
+        const unknown = Object.keys(row).filter((name) => !input.compiled.batchAccountOrder.includes(name));
+        if (unknown.length > 0)
+            throw new TypeError(`Unknown batch accounts in row ${rowIndex}: ${unknown.join(', ')}`);
+    }
+    const batchInputs = input.batchInputs ?? [];
+    if (input.compiled.rowInputOrder.length > 0 && batchInputs.length !== rows.length) {
+        throw new TypeError(`Expected one batch input record per row (${rows.length}), got ${batchInputs.length}`);
+    }
+    if (input.compiled.rowInputOrder.length === 0 && batchInputs.length > 0)
+        throw new TypeError('Template has no row inputs');
+    const groups = input.accountGroups ?? {};
+    const unknownGroups = Object.keys(groups).filter((name) => !input.compiled.accountGroupOrder.includes(name));
+    if (unknownGroups.length > 0)
+        throw new TypeError(`Unknown account groups: ${unknownGroups.join(', ')}`);
+    const groupLengths = [];
+    for (const name of input.compiled.accountGroupOrder) {
+        const members = groups[name] ?? [];
+        if (members.length > 0xff)
+            throw new RangeError(`Account group ${name} has more than 255 members`);
+        groupLengths.push(members.length);
+        for (const member of members) {
+            assertAddress(member.address, `account group ${name} member`);
+            accounts.push({ address: member.address.slice(), signer: false, writable: member.writable ?? false });
+        }
+    }
+    if (accounts.length - 1 > 120)
+        throw new RangeError('Run uses more than 120 runtime account slots');
+    return {
+        programAddress: input.programAddress.slice(),
+        accounts,
+        data: encodeRun(input.compiled, input.inputs ?? {}, { rows: batchInputs, groupLengths }),
+    };
+}
+export function decodeTemplateAccount(data) {
+    if (data.length < TEMPLATE_ACCOUNT_HEADER_LENGTH)
+        throw new RangeError('Template account is truncated');
+    const reader = new Reader(data);
+    if (reader.u8() !== 1)
+        throw new TypeError('Invalid template account discriminator');
+    if (reader.u8() !== TEMPLATE_ACCOUNT_VERSION)
+        throw new TypeError('Unsupported template account version');
+    const state = reader.u8();
+    if (state !== TEMPLATE_STATE_UPLOADING && state !== TEMPLATE_STATE_FINALIZED) {
+        throw new TypeError('Invalid template account state');
+    }
+    const bump = reader.u8();
+    const creator = reader.bytes(32);
+    const templateId = reader.u16();
+    if (reader.u16() !== 0)
+        throw new TypeError('Invalid template account reserved bytes');
+    const payloadLength = reader.u32();
+    const writtenLength = reader.u32();
+    const payloadHash = reader.bytes(32);
+    const payload = reader.bytes(reader.remaining);
+    if (payloadLength === 0 || payloadLength > MAX_TEMPLATE_PAYLOAD_LENGTH || payload.length !== payloadLength) {
+        throw new RangeError('Invalid template payload length');
+    }
+    if (writtenLength > payloadLength || (state === TEMPLATE_STATE_FINALIZED && writtenLength !== payloadLength)) {
+        throw new RangeError('Invalid template written length');
+    }
+    return {
+        version: 2,
+        state,
+        bump,
+        creator,
+        templateId,
+        payloadLength,
+        writtenLength,
+        payloadHash,
+        payload,
+    };
+}
+export function inspectTemplate(bytes) {
+    if (bytes.length < 24)
+        throw new RangeError('Template program is truncated');
+    const reader = new Reader(bytes);
+    if (!equalBytes(reader.bytes(4), Uint8Array.of(0x42, 0x56, 0x4d, 0x31))) {
+        throw new TypeError('Invalid template program magic');
+    }
+    if (reader.u8() !== TEMPLATE_PROGRAM_VERSION)
+        throw new TypeError('Unsupported template program version');
+    const fixedAccounts = reader.u8();
+    const batchStride = reader.u8();
+    const batchMaxIterations = reader.u8();
+    const inputs = reader.u8();
+    const registers = reader.u8();
+    const instructions = reader.u8();
+    const cpis = reader.u8();
+    const cpiAccounts = reader.u16();
+    const dataSegments = reader.u16();
+    const pubkeys = reader.u8();
+    const flags = reader.u8();
+    if ((flags & ~PROGRAM_FLAG_EMIT_EVENT) !== 0)
+        throw new TypeError('Invalid template flags');
+    const blobLength = reader.u16();
+    const batchMinIterations = reader.u8();
+    const rowInputs = reader.u8();
+    const accountGroups = reader.u8();
+    if (reader.u8() !== 0)
+        throw new TypeError('Invalid reserved bytes');
+    const expectedLength = 24 +
+        (fixedAccounts + batchStride) * 8 +
+        (inputs + rowInputs) * 4 +
+        instructions * 16 +
+        cpis * 12 +
+        cpiAccounts * 2 +
+        dataSegments * 8 +
+        pubkeys * 32 +
+        blobLength;
+    if (bytes.length !== expectedLength)
+        throw new RangeError('Template section lengths do not match');
+    const instructionStart = 24 + (fixedAccounts + batchStride) * 8 + (inputs + rowInputs) * 4;
+    const records = Array.from({ length: instructions }, (_, index) => {
+        const offset = instructionStart + index * 16;
+        return { opcode: bytes[offset], a: bytes[offset + 2], c: bytes[offset + 4] };
+    });
+    // Every loop's body runs at most its maximum number of times: the batch's for a FOREACH, and the
+    // `c` operand for a REPEAT. Loops never nest, so each body is a flat run of records. A registry
+    // open counts the three CPIs creating a pre-funded entry takes, as the verifier counts it.
+    const cpisOf = (record) => record.opcode === opcode.invoke ? 1 : record.opcode === opcode.openRegistry ? REGISTRY_OPEN_CPIS : 0;
+    let maxExpandedCpis = 0;
+    for (let programCounter = 0; programCounter < records.length; programCounter += 1) {
+        const record = records[programCounter];
+        if (record.opcode === opcode.forEach || record.opcode === opcode.repeat) {
+            const passes = record.opcode === opcode.forEach ? batchMaxIterations : record.c;
+            const body = records.slice(programCounter + 1, programCounter + 1 + record.a);
+            maxExpandedCpis += body.reduce((sum, inner) => sum + cpisOf(inner), 0) * passes;
+            programCounter += record.a;
+        }
+        else {
+            maxExpandedCpis += cpisOf(record);
+        }
+    }
+    const cpiStart = instructionStart + instructions * 16;
+    let maxCpiDataLength = 0;
+    for (let index = 0; index < cpis; index += 1) {
+        const offset = cpiStart + index * 12 + 8;
+        maxCpiDataLength = Math.max(maxCpiDataLength, bytes[offset] | (bytes[offset + 1] << 8));
+    }
+    return {
+        payloadBytes: bytes.length,
+        fixedAccounts,
+        batchStride,
+        batchMaxIterations,
+        batchMinIterations,
+        inputs,
+        registers,
+        instructions,
+        cpis,
+        maxExpandedCpis,
+        maxCpiDataLength,
+        emitEvent: (flags & PROGRAM_FLAG_EMIT_EVENT) !== 0,
+        rowInputs,
+        accountGroups,
+    };
+}
+function bindingDescriptor(binding, constraint, name) {
+    assertAddress(binding.address, `account ${name}`);
+    if (constraint.address && !equalBytes(binding.address, constraint.address)) {
+        throw new TypeError(`Account ${name} does not match its fixed address`);
+    }
+    return {
+        address: binding.address.slice(),
+        signer: constraint.signer,
+        writable: constraint.writable,
+    };
+}
+function encodeInput(writer, definition, value) {
+    if (definition.type === 'bool') {
+        if (typeof value !== 'boolean')
+            throw new TypeError('Expected bool input');
+        writer.u8(value ? 1 : 0);
+        return;
+    }
+    if (definition.type === 'pubkey') {
+        if (!(value instanceof Uint8Array) || value.length !== 32)
+            throw new TypeError('Expected pubkey input');
+        writer.raw(value);
+        return;
+    }
+    if (definition.type === 'bytes') {
+        if (!(value instanceof Uint8Array) || value.length > definition.maxLength) {
+            throw new TypeError(`Expected at most ${definition.maxLength} input bytes`);
+        }
+        writer.u16(value.length);
+        writer.raw(value);
+        return;
+    }
+    if (typeof value !== 'bigint' && typeof value !== 'number')
+        throw new TypeError(`Expected ${definition.type} input`);
+    const bigint = BigInt(value);
+    const ranges = {
+        u64: [0n, (1n << 64n) - 1n],
+        i64: [-(1n << 63n), (1n << 63n) - 1n],
+        u128: [0n, (1n << 128n) - 1n],
+    };
+    const [minimum, maximum] = ranges[definition.type];
+    if (bigint < minimum || bigint > maximum)
+        throw new RangeError(`Input is outside ${definition.type} range`);
+    writer.bigint(bigint, definition.type === 'u128' ? 16 : 8);
+}
+function validateTemplateId(templateId) {
+    if (!Number.isInteger(templateId) || templateId < 0 || templateId > 0xffff) {
+        throw new RangeError('Template ID must be an unsigned 16-bit integer');
+    }
+}
+function assertAddress(value, label) {
+    if (!(value instanceof Uint8Array) || value.length !== 32)
+        throw new TypeError(`${label} must contain 32 bytes`);
+}
+function equalBytes(left, right) {
+    return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+class Writer {
+    output = [];
+    u8(value) {
+        if (!Number.isInteger(value) || value < 0 || value > 0xff)
+            throw new RangeError('Expected u8');
+        this.output.push(value);
+    }
+    u16(value) {
+        if (!Number.isInteger(value) || value < 0 || value > 0xffff)
+            throw new RangeError('Expected u16');
+        this.output.push(value & 0xff, (value >>> 8) & 0xff);
+    }
+    u32(value) {
+        if (!Number.isInteger(value) || value < 0 || value > 0xffff_ffff)
+            throw new RangeError('Expected u32');
+        this.output.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
+    }
+    bigint(value, byteLength) {
+        const encoded = BigInt.asUintN(byteLength * 8, value);
+        for (let index = 0; index < byteLength; index += 1) {
+            this.u8(Number((encoded >> BigInt(index * 8)) & 0xffn));
+        }
+    }
+    raw(bytes) {
+        this.output.push(...bytes);
+    }
+    finish() {
+        return Uint8Array.from(this.output);
+    }
+}
+class Reader {
+    input;
+    offset = 0;
+    constructor(input) {
+        this.input = input;
+    }
+    get remaining() {
+        return this.input.length - this.offset;
+    }
+    u8() {
+        return this.bytes(1)[0];
+    }
+    u16() {
+        const bytes = this.bytes(2);
+        return bytes[0] | (bytes[1] << 8);
+    }
+    u32() {
+        const bytes = this.bytes(4);
+        return (bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)) >>> 0;
+    }
+    bytes(length) {
+        const end = this.offset + length;
+        if (end > this.input.length)
+            throw new RangeError('Input is truncated');
+        const value = this.input.slice(this.offset, end);
+        this.offset = end;
+        return value;
+    }
+}
+//# sourceMappingURL=instructions.js.map

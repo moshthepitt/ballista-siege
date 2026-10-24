@@ -1,0 +1,309 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import { decodeBase58 } from './base58.js';
+import { data, expression, readWidth, step, } from './schema.js';
+/** `11111111111111111111111111111111` */
+export const SYSTEM_PROGRAM_ADDRESS_BYTES = new Uint8Array(32);
+/** `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` */
+export const TOKEN_PROGRAM_ADDRESS_BYTES = Uint8Array.of(6, 221, 246, 225, 215, 101, 161, 147, 217, 203, 225, 70, 206, 235, 121, 172, 28, 180, 133, 237, 95, 91, 55, 145, 58, 140, 245, 133, 126, 255, 0, 169);
+/** `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`, Token-2022. Its token accounts share the SPL Token layout's first 165 bytes. */
+export const TOKEN_2022_PROGRAM_ADDRESS_BYTES = Uint8Array.of(6, 221, 246, 225, 238, 117, 143, 222, 24, 66, 93, 188, 228, 108, 205, 218, 182, 26, 252, 77, 131, 185, 13, 39, 254, 189, 249, 40, 216, 161, 139, 252);
+/** `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL` */
+export const ASSOCIATED_TOKEN_PROGRAM_ADDRESS_BYTES = Uint8Array.of(140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142, 13, 131, 11, 90, 19, 153, 218, 255, 16, 132, 4, 142, 123, 216, 219, 233, 248, 89);
+/**
+ * `Sysvar1nstructions1111111111111111111111111`. Declare an account pinned to this address to read
+ * the transaction's instructions; every introspection expression names that account.
+ */
+export const INSTRUCTIONS_SYSVAR_ADDRESS_BYTES = Uint8Array.of(6, 167, 213, 23, 24, 123, 209, 102, 53, 218, 212, 4, 85, 253, 194, 192, 193, 36, 198, 143, 33, 86, 117, 165, 219, 186, 203, 95, 8, 0, 0, 0);
+/** `Ed25519SigVerify111111111111111111111111111`, the Ed25519 signature-verification precompile. */
+export const ED25519_PROGRAM_ADDRESS_BYTES = Uint8Array.of(3, 125, 70, 214, 124, 147, 251, 190, 18, 249, 66, 143, 131, 141, 64, 255, 5, 112, 116, 73, 39, 244, 138, 100, 252, 202, 112, 68, 128, 0, 0, 0);
+/**
+ * An address as the 32 bytes a template pins, or a `pubkey` input takes: a Kit `Address` or any
+ * base58 string. Throws a `TypeError` for text that is not 32 bytes of base58.
+ *
+ * Kit's `getAddressEncoder().encode()` gives a `ReadonlyUint8Array`, which TypeScript refuses where
+ * a template expects a `Uint8Array`.
+ */
+export function addressBytes(address) {
+    const bytes = decodeBase58(address);
+    if (bytes.length !== 32)
+        throw new TypeError(`${JSON.stringify(address)} is not a 32-byte address`);
+    return bytes;
+}
+/**
+ * An Anchor instruction discriminator: the first 8 bytes of `sha256("global:<name>")`, where `name`
+ * is the handler's snake_case name in the program's `#[program]` module. A call to an Anchor
+ * program starts its data with these bytes.
+ */
+export function anchorDiscriminator(name) {
+    return Uint8Array.from(sha256(new TextEncoder().encode(`global:${name}`)).slice(0, 8));
+}
+export function assertPda(input) {
+    return step.require(expression.equal(expression.accountField(input.account, 'key'), expression.pda(input.program, input.seeds, input.bump)), input.label);
+}
+export function assertAta(input) {
+    return assertPda({
+        account: input.associatedTokenAccount,
+        program: input.associatedTokenProgram,
+        seeds: [
+            expression.accountField(input.owner, 'key'),
+            expression.accountField(input.tokenProgram, 'key'),
+            expression.accountField(input.mint, 'key'),
+        ],
+        ...(input.bump ? { bump: input.bump } : {}),
+        ...(input.label ? { label: input.label } : {}),
+    });
+}
+export const assertAssociatedTokenAccount = assertAta;
+export function systemTransfer(input) {
+    return step.invoke({
+        program: input.systemProgram,
+        programAddress: SYSTEM_PROGRAM_ADDRESS_BYTES,
+        accounts: [
+            { account: input.from, signer: true, writable: true },
+            { account: input.to, signer: false, writable: true },
+        ],
+        data: [data.literal(Uint8Array.of(2, 0, 0, 0)), data.encode('u64', input.lamports)],
+        ...(input.when ? { when: input.when } : {}),
+        ...(input.label ? { label: input.label } : {}),
+    });
+}
+export function tokenTransfer(input) {
+    return step.invoke({
+        program: input.tokenProgram,
+        programAddress: TOKEN_PROGRAM_ADDRESS_BYTES,
+        accounts: [
+            { account: input.source, signer: false, writable: true },
+            { account: input.destination, signer: false, writable: true },
+            { account: input.authority, signer: true, writable: false },
+        ],
+        data: [data.literal(Uint8Array.of(3)), data.encode('u64', input.amount)],
+        ...(input.when ? { when: input.when } : {}),
+        ...(input.label ? { label: input.label } : {}),
+    });
+}
+export function createAssociatedTokenAccount(input) {
+    return step.invoke({
+        program: input.associatedTokenProgram,
+        programAddress: ASSOCIATED_TOKEN_PROGRAM_ADDRESS_BYTES,
+        accounts: [
+            { account: input.payer, signer: true, writable: true },
+            { account: input.associatedTokenAccount, signer: false, writable: true },
+            { account: input.owner, signer: false, writable: false },
+            { account: input.mint, signer: false, writable: false },
+            { account: input.systemProgram, signer: false, writable: false },
+            { account: input.tokenProgram, signer: false, writable: false },
+        ],
+        data: [],
+        ...(input.when ? { when: input.when } : {}),
+        ...(input.label ? { label: input.label } : {}),
+    });
+}
+/** Uses ordinary ATA Create; Ballista's `isEmpty` guard provides the idempotent behavior. */
+export function ensureAssociatedTokenAccount(input) {
+    const isMissing = expression.accountField(input.associatedTokenAccount, 'isEmpty');
+    const when = input.when ? expression.and(isMissing, input.when) : isMissing;
+    return createAssociatedTokenAccount({ ...input, when });
+}
+/**
+ * The first 16 bytes of an Ed25519 precompile instruction with one signature, from agave
+ * `precompiles/src/ed25519.rs`: a `u8` signature count and a padding byte, then the signature's
+ * seven little-endian `u16` offsets. Byte offsets.
+ */
+const ED25519_HEADER = {
+    signatureCount: 0,
+    signatureInstructionIndex: 4,
+    publicKeyOffset: 6,
+    publicKeyInstructionIndex: 8,
+    messageDataOffset: 10,
+    messageDataSize: 12,
+    messageInstructionIndex: 14,
+};
+/** An instruction-index field of `u16::MAX`: the Ed25519 instruction's own data. */
+const ED25519_THIS_INSTRUCTION = 0xffffn;
+/**
+ * A mask and the value the masked header must equal, from `[byte offset, width, value]` fields of
+ * a little-endian header.
+ */
+function headerMask(fields) {
+    let mask = 0n;
+    let expected = 0n;
+    for (const [offset, width, value] of fields) {
+        const shift = BigInt(offset * 8);
+        mask |= ((1n << BigInt(width * 8)) - 1n) << shift;
+        expected |= value << shift;
+    }
+    return { mask, expected };
+}
+/**
+ * Binds an Ed25519 signature that the transaction's precompile instruction verified to this
+ * template's inputs.
+ *
+ * The Ed25519 program verifies its signatures as part of the transaction, so a transaction whose
+ * signature is invalid fails and nothing the template did survives. What the precompile does not
+ * say is whose signature it checked, or over which bytes. The steps returned here require that
+ * instruction `index` is the Ed25519 program, holds exactly one signature, takes the signature,
+ * the key and the message from its own data, was signed by `signer`, and signed exactly
+ * `messageLength` bytes. `field` then reads the signed message.
+ *
+ * The count, the three instruction indexes and the message size all sit in the instruction's
+ * first 16 bytes, so one masked `u128` comparison checks them together: five separate
+ * comparisons would take a dozen more of the template's 64 registers.
+ *
+ * `name` prefixes the step labels and the two variables the steps bind, `<name>Instruction` and
+ * `<name>Message`, so one template can check more than one signature. Every step is labeled, so a
+ * failed run names the step: with no instruction before the run, an `index` of the one before it
+ * underflows at `<name>InstructionIndex`.
+ */
+export function ed25519Signature(input) {
+    const name = input.name ?? 'signature';
+    if (!Number.isInteger(input.messageLength) || input.messageLength < 1 || input.messageLength > 0xffff) {
+        throw new RangeError('messageLength must be from 1 to 65535 bytes');
+    }
+    if (input.signer.kind === 'input' || input.signer.kind === 'rowInput') {
+        throw new TypeError(`signer must be a key the transaction's builder cannot choose, not the ${input.signer.kind} ${input.signer.name}`);
+    }
+    const instruction = expression.variable(`${name}Instruction`);
+    const message = expression.variable(`${name}Message`);
+    const offsetField = (offset) => expression.instructionData(input.sysvar, instruction, offset, 'u16');
+    const header = headerMask([
+        [ED25519_HEADER.signatureCount, 1, 1n],
+        [ED25519_HEADER.signatureInstructionIndex, 2, ED25519_THIS_INSTRUCTION],
+        [ED25519_HEADER.publicKeyInstructionIndex, 2, ED25519_THIS_INSTRUCTION],
+        [ED25519_HEADER.messageDataSize, 2, BigInt(input.messageLength)],
+        [ED25519_HEADER.messageInstructionIndex, 2, ED25519_THIS_INSTRUCTION],
+    ]);
+    return {
+        steps: [
+            step.let(`${name}Instruction`, input.index, `${name}InstructionIndex`),
+            step.require(expression.equal(expression.instructionProgram(input.sysvar, instruction), expression.pubkey(ED25519_PROGRAM_ADDRESS_BYTES)), `${name}IsEd25519`),
+            step.require(expression.equal(expression.bitAnd(expression.instructionData(input.sysvar, instruction, 0, 'u128'), expression.u128(header.mask)), expression.u128(header.expected)), `${name}IsOneSelfContainedSignature`),
+            step.require(expression.equal(expression.instructionData(input.sysvar, instruction, offsetField(ED25519_HEADER.publicKeyOffset), 'pubkey'), input.signer), `${name}IsBySigner`),
+            step.let(`${name}Message`, offsetField(ED25519_HEADER.messageDataOffset), `${name}MessageOffset`),
+        ],
+        field(offset, type) {
+            if (!Number.isInteger(offset) || offset < 0 || offset + readWidth[type] > input.messageLength) {
+                throw new RangeError(`${type} at ${offset} does not lie inside the ${input.messageLength}-byte signed message`);
+            }
+            const at = offset === 0 ? message : expression.add(message, expression.u64(offset));
+            return expression.instructionData(input.sysvar, instruction, at, type);
+        },
+    };
+}
+/**
+ * Whether `value`'s tree is built only from literals, arithmetic or logic over them, and registry
+ * reads — the expressions `rateLimit` trusts for `cap` and `refillPerSecond`. This is an allow
+ * list, not a search for the caller-chosen kinds: a kind this does not yet know about is refused,
+ * not silently let through, which is how the previous, deny-list version of this check missed a
+ * `variable` bound to an input, a read of the Instructions sysvar, and a read of an account's own
+ * field.
+ */
+function isTemplateConstant(value) {
+    if (Array.isArray(value))
+        return value.every(isTemplateConstant);
+    if (value === null || typeof value !== 'object')
+        return true;
+    const record = value;
+    if (typeof record.kind !== 'string')
+        return true;
+    switch (record.kind) {
+        // Self-contained: `registry` names its account and field as plain strings, with no nested
+        // expression to walk. The entry it reads is a fixed account the runtime verifies against its
+        // derived PDA, so, unlike a generic account read, the caller cannot substitute another one;
+        // who may write that field is the template's to decide (see `rateLimit`). The clock and a
+        // loop's index are refused: neither is caller-chosen, but neither is a constant either, and a
+        // cap that grows with time or with a caller-sized loop is not the limit an author means.
+        case 'literal':
+        case 'registry':
+            return true;
+        // Pure operators over other expressions: safe exactly when every operand is.
+        case 'binary':
+        case 'multiplyDivide':
+        case 'powerOfTen':
+        case 'not':
+        case 'select':
+        case 'cast':
+        case 'bytesLength':
+            return Object.values(record).every(isTemplateConstant);
+        // Everything else — input, rowInput, variable (this cannot trace what it was bound to),
+        // accountField, accountData, accountDataBytes, returnData, pda, and every instruction* kind
+        // that reads the caller-built transaction — is refused, including any kind added later.
+        default:
+            return false;
+    }
+}
+/**
+ * Steps that spend `amount` from a limit that refills over time, kept in the registry entry in
+ * fixed account `registry` (declared with `account.registry`).
+ *
+ * The entry's `spent` field (a `u64`) is what has been spent and not yet refilled, and its
+ * `lastSpend` field (an `i64`) the Unix time of the last spend. Each run takes `now` as the clock,
+ * or `lastSpend` if the clock reads earlier, refills `spent` by `(now − lastSpend) ×
+ * refillPerSecond`, never below zero, adds `amount`, requires the total to be at most `cap`, and
+ * writes `spent` and `now` back.
+ *
+ * - The refill is computed in `u128`: the elapsed seconds are below 2^63 and the rate below 2^64,
+ *   so no gap between runs can overflow it. A fresh entry's `lastSpend` of 0 refills fully.
+ * - The clock can step back between slots. A run then refills nothing, rather than failing, and
+ *   leaves `lastSpend` where it was: it never moves back, so no later run refills the same seconds
+ *   twice.
+ * - `cap`, `refillPerSecond` and `amount` are `u64` expressions. `cap` and `refillPerSecond` must
+ *   be a template constant, written inline: a literal, such as `expression.u64(1_000_000)`, or
+ *   arithmetic or logic over literals, such as `expression.multiply(expression.u64(1_000),
+ *   expression.u64(1_000_000))`. A registry field is the one exception, so that an author can set a
+ *   cap or rate later: the helper accepts it but cannot tell who wrote it. The entry's address is
+ *   verified at run time, but its fields hold whatever this template's runs wrote, so the template
+ *   must write that field only in an author-only branch (one that requires a pinned author
+ *   signer). A field any caller's run can write gives the caller the cap. Everything else is
+ *   refused: an input or row input, a variable (its origin cannot be traced), a read of the
+ *   caller-built transaction, or of an account's data or fields (a caller can substitute any
+ *   account not pinned by address). `cap` and `refillPerSecond` each appear once in the generated
+ *   steps, so writing them inline costs nothing.
+ * - The registry account's `key` (passed to `account.registry`) must not come from the caller
+ *   either: a key taken from an input lets a caller open a fresh entry on every run and spend past
+ *   the cap forever. Key the entry by a signer's address, such as
+ *   `expression.accountKey('caller')`, for a per-signer limit, or leave `key` absent for the one
+ *   zero-keyed, template-wide entry. This helper only ever sees `registry` as an account name and
+ *   cannot see the account's declared key, so it cannot check this for you: it is the caller's to
+ *   get right.
+ *
+ * `name` prefixes the variables the steps bind, `<name>Last`, `<name>Now`, `<name>Spent`,
+ * `<name>Refill` and `<name>Total`, and names the requirement `within<Name>`. Without it, the
+ * variables take the registry account's name, followed by the `spent` field's when that is not
+ * `spent`, and the requirement is `withinRateLimit`. So limits kept in different entries, or in
+ * different fields of one entry, fit in one template; give each a `name` to tell their failures
+ * apart by label.
+ */
+export function rateLimit(input) {
+    for (const field of ['cap', 'refillPerSecond']) {
+        if (!isTemplateConstant(input[field])) {
+            throw new TypeError(`${field} must be written inline, from literals and arithmetic: a template constant, not ` +
+                `an input, a variable, a read of the caller-built transaction, or of an account's data ` +
+                `or fields. It appears once in the generated steps, so inlining it costs nothing.`);
+        }
+    }
+    const spentField = input.spent ?? 'spent';
+    const lastSpendField = input.lastSpend ?? 'lastSpend';
+    const capitalized = (text) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+    // Each limit lives in its own entry, or its own field of one, so either names its variables
+    // apart from another limit's in the same template.
+    const prefix = input.name ?? (spentField === 'spent' ? input.registry : `${input.registry}${capitalized(spentField)}`);
+    const u128 = (value) => expression.cast('u128', value);
+    const last = expression.variable(`${prefix}Last`);
+    const now = expression.variable(`${prefix}Now`);
+    const spent = expression.variable(`${prefix}Spent`);
+    const refill = expression.variable(`${prefix}Refill`);
+    const total = expression.variable(`${prefix}Total`);
+    return [
+        step.let(`${prefix}Last`, expression.registry(input.registry, lastSpendField)),
+        // `now` never reads earlier than `lastSpend`, so `now − lastSpend` is never negative, and the
+        // `lastSpend` written back never moves back.
+        step.let(`${prefix}Now`, expression.max(expression.clockUnixTimestamp(), last)),
+        step.let(`${prefix}Spent`, u128(expression.registry(input.registry, spentField))),
+        step.let(`${prefix}Refill`, expression.multiply(u128(expression.subtract(now, last)), u128(input.refillPerSecond))),
+        step.let(`${prefix}Total`, expression.add(expression.subtract(spent, expression.min(spent, refill)), u128(input.amount))),
+        step.require(expression.lessThanOrEqual(total, u128(input.cap)), `within${capitalized(input.name ?? 'rateLimit')}`),
+        step.setRegistry(input.registry, spentField, expression.cast('u64', total)),
+        step.setRegistry(input.registry, lastSpendField, now),
+    ];
+}
+//# sourceMappingURL=helpers.js.map

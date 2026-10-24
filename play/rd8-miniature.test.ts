@@ -1,0 +1,23 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { fight, newRun, withPart } from '../src/v1/sim.js';
+import { makeTimeline } from './replay.js';
+import { renderRecapBuild } from './ui/screens.js';
+import { clearBattleEffects } from './ui/battle.js';
+import { renderParts, renderFoes, renderIncoming, drawLeakPaths } from './ui/board.js';
+vi.mock('./ui/battle.js', () => ({ clearBattleEffects: vi.fn() }));
+vi.mock('./ui/board.js', () => ({ renderParts: vi.fn(), renderFoes: vi.fn(), renderIncoming: vi.fn(), drawLeakPaths: vi.fn() }));
+afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
+it('reconstructs the build when Fight was pressed, clearing aftermath before drawing it', () => {
+  const built = withPart({ ...newRun(13n, 'practice'), wave: 4n }, 5n, 3n, 1n), result = fight(built);
+  expect(result.frames.at(-1)!.palisades.some(p => p.hp === 0n)).toBe(true);
+  const board = { dataset: { endLabel: '' } };
+  vi.stubGlobal('document', { querySelector: () => board });
+  renderRecapBuild({ start: built, built, result, timeline: makeTimeline(built, result.frames) }, result.state);
+  expect(clearBattleEffects).toHaveBeenCalledWith(true);
+  expect(drawLeakPaths).toHaveBeenCalledWith([]);
+  expect(renderParts).toHaveBeenCalledWith(built, { phase: 'end' });
+  expect(vi.mocked(clearBattleEffects).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(renderParts).mock.invocationCallOrder[0]);
+  expect(renderFoes).toHaveBeenCalledWith([]);
+  expect(renderIncoming).toHaveBeenCalledWith(built, [], true);
+  expect(board.dataset.endLabel).toBe('Wave 5 build');
+});

@@ -1,0 +1,9 @@
+node_modules/
+.tmp/
+dist/
+*.log
+.env
+
+# The vendored SDK is distributed as JavaScript and is needed by deploy/build checks.
+!vendor/ballista-sdk/dist/
+!vendor/ballista-sdk/dist/**
